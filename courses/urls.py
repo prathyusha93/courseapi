@@ -1,19 +1,21 @@
-from django.urls import path
-from . import views
+# courses/urls.py
+from rest_framework.routers import DefaultRouter
+from django.urls import path, include
+from .views import (
+    CourseViewSet,
+    ModuleViewSet,
+    TopicViewSet,
+    ContentViewSet,
+    EnrollmentViewSet,
+)
+
+router = DefaultRouter()
+router.register(r"courses", CourseViewSet, basename="course")
+router.register(r"modules", ModuleViewSet, basename="module")
+router.register(r"topics", TopicViewSet, basename="topic")
+router.register(r"contents", ContentViewSet, basename="content")
+router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
 
 urlpatterns = [
-    path('contents/', views.ContentListCreateView.as_view()),
-    path('contents/<str:content_id>/', views.ContentDetailView.as_view()),
-
-    path('topics/', views.TopicListCreateView.as_view()),
-    path('topics/<str:topic_id>/', views.TopicDetailView.as_view()),
-
-    path('modules/', views.ModuleListCreateView.as_view()),
-    path('modules/<str:module_id>/', views.ModuleDetailView.as_view()),
-
-    path('courses/', views.CourseListCreateView.as_view()),
-    path('courses/<str:course_id>/', views.CourseDetailView.as_view()),
-
-    # FIXED
-    path('enrollments/', views.EnrollmentView.as_view(), name='enrollments'),
+    path("", include(router.urls)),
 ]

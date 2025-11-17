@@ -1,6 +1,4 @@
-"""
-Django settings for courseapi project.
-"""
+
 
 from pathlib import Path
 import os
@@ -20,8 +18,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    # 'rest_framework.authtoken',   # not needed when using JWT, keep commented
+    # 'rest_framework.authtoken',   # not needed when using JWT, keep comment
     'courses',
+    'accounts',
 ]
 
 MIDDLEWARE = [
@@ -114,3 +113,5 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "prathyushayarlagadda93@gmail.com"
 EMAIL_HOST_PASSWORD = "maud bjpr xokz qwfm"  # your app password (keep secret)
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+AUTH_USER_MODEL = "accounts.User"
+
