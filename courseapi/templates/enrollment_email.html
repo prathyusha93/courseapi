@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .main {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f7f7f7;
+        }
+        .box {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2b5fc0;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 13px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+<div class="main">
+    <div class="box">
+        <p class="title">Hi {{ username }},</p>
+
+        <p>You have successfully enrolled in:</p>
+        <h3>{{ course_title }}</h3>
+
+        <p><b>Price:</b> ₹{{ price }}</p>
+
+        <p>Thank you for choosing our platform!</p>
+
+        <div class="footer">
+            This is an automated email. Please do not reply.
+        </div>
+    </div>
+</div>
+</body>
+</html>

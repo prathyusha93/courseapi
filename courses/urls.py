@@ -1,6 +1,7 @@
 # courses/urls.py
-from rest_framework.routers import DefaultRouter
 from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+
 from .views import (
     CourseViewSet,
     ModuleViewSet,
@@ -17,5 +18,5 @@ router.register(r"contents", ContentViewSet, basename="content")
 router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
 
 urlpatterns = [
-    path("", include(router.urls)),
+    path("", include(router.urls)),   # prefix handled by project urls (api/)
 ]

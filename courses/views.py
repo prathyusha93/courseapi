@@ -1,18 +1,23 @@
 # courses/views.py
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
+
+from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.decorators import action
+
 from bson import ObjectId
 from datetime import datetime
 
+# Serializers
 from .serializers import (
-    ContentSerializer,
-    TopicSerializer,
-    ModuleSerializer,
     CourseSerializer,
     EnrollmentSerializer,
+    ModuleSerializer,
+    TopicSerializer,
+    ContentSerializer
 )
+
+# Mongo Utils
 from .utils import (
     courses_collection,
     modules_collection,
@@ -21,186 +26,268 @@ from .utils import (
     enrollment_collection,
     get_courses,
     convert_objectids,
+    find_course
 )
 
+# Service Layer
 from .services.enrollment_service import EnrollmentService
 
+# Notification
+from notifications.services import NotificationService
 
-# --------------------------------------------------------
-# Simple Base ViewSet for Mongo Collections
-# --------------------------------------------------------
-class SimpleMongoViewSet(viewsets.ViewSet):
-    collection = None
-    serializer_class = None
+
+# =====================================================================
+# MODULES
+# =====================================================================
+class ModuleViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
-        page = int(request.GET.get("page", 1))
-        limit = int(request.GET.get("limit", 50))
-        skip = (page - 1) * limit
-        docs = list(self.collection.find().skip(skip).limit(limit))
+        docs = list(modules_collection.find())
         return Response(convert_objectids(docs))
 
-    def retrieve(self, request, pk=None):
-        try:
-            doc = self.collection.find_one({"_id": ObjectId(pk)})
-        except Exception:
-            return Response({"detail": "Invalid ID"}, status=400)
-        if not doc:
-            return Response({"detail": "Not found"}, status=404)
-        return Response(convert_objectids(doc))
-
     def create(self, request):
-        serializer = self.serializer_class(data=request.data)
+        serializer = ModuleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        res = self.collection.insert_one(serializer.validated_data)
-        saved = self.collection.find_one({"_id": res.inserted_id})
+
+        res = modules_collection.insert_one(serializer.validated_data)
+        saved = modules_collection.find_one({"_id": res.inserted_id})
         return Response(convert_objectids(saved), status=201)
 
 
-class ContentViewSet(SimpleMongoViewSet):
-    serializer_class = ContentSerializer
-    collection = contents_collection
+# =====================================================================
+# TOPICS
+# =====================================================================
+class TopicViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request):
+        serializer = TopicSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        res = topics_collection.insert_one(serializer.validated_data)
+        saved = topics_collection.find_one({"_id": res.inserted_id})
+        return Response(convert_objectids(saved), status=201)
 
 
-class TopicViewSet(SimpleMongoViewSet):
-    serializer_class = TopicSerializer
-    collection = topics_collection
+# =====================================================================
+# CONTENT
+# =====================================================================
+class ContentViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request):
+        serializer = ContentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        res = contents_collection.insert_one(serializer.validated_data)
+        saved = contents_collection.find_one({"_id": res.inserted_id})
+        return Response(convert_objectids(saved), status=201)
 
 
-class ModuleViewSet(SimpleMongoViewSet):
-    serializer_class = ModuleSerializer
-    collection = modules_collection
-
-
-# --------------------------------------------------------
-# Course ViewSet
-# --------------------------------------------------------
+# =====================================================================
+# COURSES MAIN
+# =====================================================================
 class CourseViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
+    # ---------------------------------------------------------
+    # LIST COURSES
+    # ---------------------------------------------------------
     def list(self, request):
         page = int(request.GET.get("page", 1))
         limit = int(request.GET.get("limit", 10))
-        search = request.GET.get("search", "")
-        sort_field = request.GET.get("sort", None)
-        sort_order = request.GET.get("order", "asc")
-        docs, total = get_courses(page, limit, search, sort_field, sort_order)
-        return Response(
-            {
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "search": search,
-                "sort": sort_field or "none",
-                "results": docs,
+
+        extra_query = {}
+
+        if "segment" in request.GET:
+            extra_query["segment"] = {
+                "$in": request.GET.get("segment").strip("[]").split(",")
             }
+
+        if "category" in request.GET:
+            extra_query["metadata.category.name"] = {
+                "$in": request.GET.get("category").strip("[]").split(",")
+            }
+
+        if "sub_category" in request.GET:
+            extra_query["metadata.category.sub_category.name"] = {
+                "$in": request.GET.get("sub_category").strip("[]").split(",")
+            }
+
+        if "course_type" in request.GET:
+            extra_query["course_type"] = {
+                "$in": request.GET.get("course_type").strip("[]").split(",")
+            }
+
+        docs, total = get_courses(
+            page=page,
+            limit=limit,
+            params=request.GET,
+            extra_query=extra_query,
         )
 
+        return Response({
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "results": docs
+        })
+
+    # ---------------------------------------------------------
+    # GET ONE COURSE (supports both ObjectId + string IDs)
+    # ---------------------------------------------------------
     def retrieve(self, request, pk=None):
+
+        # Try ObjectId
         try:
             doc = courses_collection.find_one({"_id": ObjectId(pk)})
-        except Exception:
-            return Response({"detail": "Invalid course ID"}, status=400)
-        if not doc:
-            return Response({"detail": "Course not found"}, status=404)
-        return Response(convert_objectids(doc))
+            if doc:
+                return Response(convert_objectids(doc))
+        except:
+            pass
 
+        # Try string _id
+        doc = courses_collection.find_one({"_id": pk})
+        if doc:
+            return Response(convert_objectids(doc))
+
+        return Response({"detail": "Course not found"}, status=404)
+
+    # ---------------------------------------------------------
+    # CREATE COURSE
+    # ---------------------------------------------------------
     def create(self, request):
         serializer = CourseSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         data = serializer.validated_data
-        data.setdefault("created_at", datetime.utcnow().isoformat())
-        data.setdefault("updated_at", datetime.utcnow().isoformat())
+        data["created_at"] = datetime.utcnow().isoformat()
+        data["updated_at"] = datetime.utcnow().isoformat()
+
         res = courses_collection.insert_one(data)
         saved = courses_collection.find_one({"_id": res.inserted_id})
+
         return Response(convert_objectids(saved), status=201)
 
-    # ---------- self enroll ----------
+    # ---------------------------------------------------------
+    # USER SELF ENROLL
+    # ---------------------------------------------------------
     @action(detail=True, methods=["post"])
     def enroll(self, request, pk=None):
-        """
-        Self-enroll: the logged-in user enrolls themself.
-        """
-        user = request.user
-        result = EnrollmentService.self_enroll(user, pk)
-        if result.get("error"):
-            # EnrollmentService returns {error:...} or {"ok": True...}
+        result = EnrollmentService.self_enroll(request.user, pk)
+
+        if "error" in result:
             return Response(result, status=400)
+
+        course_title = result["course"]["course_title"]
+
+        # Send email
+        NotificationService.send(
+            event_name="COURSE_ENROLLED",
+            ctx={"username": request.user.username, "course": course_title},
+            to_email=request.user.email
+        )
+
         return Response(result["enrollment"], status=201)
 
-    # ---------- admin assign single ----------
-    @action(detail=True, methods=["post"], url_path="assign", permission_classes=[IsAdminUser])
+    # ---------------------------------------------------------
+    # ADMIN ASSIGN ONE USER
+    # ---------------------------------------------------------
+    @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
     def assign(self, request, pk=None):
-        """
-        Admin assigns a single user:
-        Body: {"user_id": <int>}
-        """
+
         user_id = request.data.get("user_id")
         if not user_id:
             return Response({"error": "user_id_required"}, status=400)
 
-        # import here to avoid circular imports at module load
         from accounts.models import User
-
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response({"error": "invalid_user"}, status=404)
 
-        result = EnrollmentService.assign_user(user, pk, assigned_by_admin=True)
-        if result.get("error"):
-            return Response(result, status=400)
-        return Response(result["enrollment"], status=201)
+        result = EnrollmentService.assign_user(user, pk)
 
-    # ---------- admin assign multiple ----------
-    @action(detail=True, methods=["post"], url_path="assign-multiple", permission_classes=[IsAdminUser])
+        if "error" in result:
+            return Response(result, status=400)
+
+        course_title = result["course"]["course_title"]
+
+        NotificationService.send(
+            event_name="COURSE_ENROLLED",
+            ctx={"username": user.username, "course": course_title},
+            to_email=user.email
+        )
+
+        return Response(result, status=201)
+
+    # ---------------------------------------------------------
+    # ADMIN ASSIGN MULTIPLE USERS
+    # ---------------------------------------------------------
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsAdminUser],
+        url_path="assign-multiple"
+    )
     def assign_multiple(self, request, pk=None):
-        """
-        Admin bulk-assign users:
-        Body: {"user_ids": [1, 2, 3]}
-        """
-        user_ids = request.data.get("user_ids")
-        if not isinstance(user_ids, list):
-            return Response({"error": "user_ids must be a list"}, status=400)
+
+        user_ids = request.data.get("user_ids", [])
+
+        if not isinstance(user_ids, list) or len(user_ids) == 0:
+            return Response({"error": "user_ids must be a non-empty list"}, status=400)
 
         from accounts.models import User
+        users, invalid = [], []
 
-        users_to_assign = []
-        invalid_ids = []
         for uid in user_ids:
             try:
-                u = User.objects.get(id=uid)
-                users_to_assign.append(u)
+                users.append(User.objects.get(id=uid))
             except User.DoesNotExist:
-                invalid_ids.append(uid)
+                invalid.append(uid)
 
-        service_res = EnrollmentService.assign_multiple(users_to_assign, pk)
+        result = EnrollmentService.assign_multiple(users, pk)
 
-        # if invalid_ids exist, include them in response
-        if invalid_ids:
-            service_res.setdefault("invalid_user_ids", invalid_ids)
+        if "error" in result:
+            return Response(result, status=400)
 
-        return Response(service_res, status=201 if service_res.get("ok") else 400)
+        course_title = result["course"]["course_title"]
+
+        # Send emails to each assigned user
+        for user in users:
+            NotificationService.send(
+                event_name="COURSE_ENROLLED",
+                ctx={"username": user.username, "course": course_title},
+                to_email=user.email
+            )
+
+        if invalid:
+            result["invalid_user_ids"] = invalid
+
+        return Response(result, status=201)
 
 
-# --------------------------------------------------------
-# Enrollment ViewSet (simple)
-# --------------------------------------------------------
+# =====================================================================
+# ENROLLMENT VIEWSET
+# =====================================================================
 class EnrollmentViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def create(self, request):
         serializer = EnrollmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         course_id = serializer.validated_data["course_id"]
         result = EnrollmentService.self_enroll(request.user, course_id)
-        if result.get("error"):
-            return Response(result, status=400)
-        return Response(result["enrollment"], status=201)
+        return Response(result, status=201)
 
     @action(detail=False, methods=["get"])
     def my(self, request):
         user_id = str(request.user.id)
-        user_enrollments = list(enrollment_collection.find({"user_id": user_id}))
-        return Response({"username": request.user.username, "enrolled_courses": convert_objectids(user_enrollments)})
+        docs = list(enrollment_collection.find({"user_id": user_id}))
+
+        return Response({
+            "username": request.user.username,
+            "enrolled_courses": convert_objectids(docs)
+        })

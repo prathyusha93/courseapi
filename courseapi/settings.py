@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     # 'rest_framework.authtoken',   # not needed when using JWT, keep comment
     'courses',
     'accounts',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -111,7 +112,7 @@ EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "prathyushayarlagadda93@gmail.com"
-EMAIL_HOST_PASSWORD = "maud bjpr xokz qwfm"  # your app password (keep secret)
+EMAIL_HOST_PASSWORD = "gtzx raln ltrm mpnx"  # your app password (keep secret)
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 AUTH_USER_MODEL = "accounts.User"
 
